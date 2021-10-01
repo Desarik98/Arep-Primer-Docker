@@ -15,7 +15,7 @@ public class BDConnection {
     private MongoDatabase database;
 
     public BDConnection() {
-        uri = new MongoClientURI("mongodb://54.166.156.34:27017/db");
+        uri = new MongoClientURI("mongodb://localhost:27017/db");
         client = new MongoClient(uri);
         database = client.getDatabase("db");
     }

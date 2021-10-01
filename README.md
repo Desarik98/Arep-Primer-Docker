@@ -1,8 +1,4 @@
-# AREP-LAB5
-
 # TALLER DE DE MODULARIZACIÓN CON VIRTUALIZACIÓN E INTRODUCCIÓN A DOCKER Y A AWS
-# Profesor: Luis Daniel Benavides
-# AREP - Arquitecturas Empresariales 2021-1
 
 En este taller encontrará una aplicación web pequeña usando el framework Spark java (http://sparkjava.com/). 
 Ademas se van a construir varios contenedores docker para las aplicaciónes y base datos que posteriormente
@@ -21,117 +17,195 @@ Para poder usar el proyecto lo primero que se debe realizar es clonar el proyect
 ```
 git clone https://github.com/Desarik98/Arep-Primer-Docker.git
 ```
-## Construccion
 
-Este proyecto basicamente esta construido en maven y el editor que se utilizo fue Visual Studio Code, teniendo el JDK antes mencionado, especificamente se utilizo el lenguaje Java, con el mini framework Spring propio.
+Luego debe redirigirse por medio de la terminal al directorio en donde se clonó el proyecto la cual contendrá el archivo pom.xml. Una vez ubicado en este directorio se debe compilar el programa, para esto, utilice el siguiente comando:
+
+```
+mvn package
+```
 
 ## Diseño
 
-Diagramas del diseño
+La aplicación inicial llamada RoundRobin va a recibir las los logs por parte del usuario, esta estará montada en una
+instancia de EC2 que posteriormente será conectada a un LoadBalancer el cual conectara 3 imagenes docker corriendo por distintos 
+puertos y guardara los logs en la base de datos MongoDB.
 
-Diseño General y de despliegue
+![Arquitectura](Images/Arquitectura.png)
 
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/general.PNG)
+## Construccion
 
-Diseño Api RoundRobin
+### MongoDB
 
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/roundrobin.PNG)
+Se utilizó una imagén de mongo que esta publicada en un repositorio de Docker Hub para que posteriormente se añadiera
+al docker-compose.yml:
 
-Diseño Api LogServices
-
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/logservices.PNG)
-
-
-
-## Descripcion del diseño
-Esta se encuentra en el documento latex aqui se encuentra con extension pdf, es el unico archivo con esta extension en este repositorio.
-
-## Como usar el Proyecto
-En este mismo repositorio puede clonar o descargar el proyecto a traves de la aplicacion git ya instalada en su computador. Recomendacion, Si se clona utilizar el comando :
-
-        git clone https://github.com/JuanRomero11/AREP-LAB4.git
-
-Despues de que el proyecto esta clonado se accede a la consola del computador en este caso accedemos a la terminal de comandos de Windows(cmd) y entramos directamente en la carpeta en donde esta nuestro proyecto y como primer paso compilamos con el comando
-
-        mvn package
-
-la clase principal como se puede evidenciar es RoundRobin si se quiere ejecutar local se ubica en el directorio raiz de RoundRobin y ejecuta el comando:
-
-        java -cp target/classes;target/dependency/* edu.eci.escualing.arep.AppLoundRoundRobin.App
-
-al correr debe de correr en el puerto 4567 y el resultado es el siguiente
-
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/localRoundRobin.PNG)
-
-## Despliegue
-
-Como esta explicito en el resumen y en el documento latex. Para realizar el depliegue en la instancia EC2 de aws se utilizo la herramienta docker, en la cual se realizaron las pruebas locales de las imagenes en los contenedores, y posteriormente estas imagenes se subieron a Docker Hub para utilizarlas en dicha instancia.
-
-### Creacion de imagenes
-
-- Como primer paso se crean las imagenes en docker. Con el archivo docker-compose.yml se genera la imagen de la base de datos MONGO con el siguiente comando(este comando se tiene que ejecutar en la carpeta raiz de logservices).
-
-        docker-compose up -d
-
-- Despues de ello se generan las iamgenes de la Api de LogServices Y RoundRobin, con los siguientes comandos(estos comandos se tiene que ejecutar en la respectiva carpeta raiz de cada proyecto).
-
-        docker build --tag logservices .
-        
-        docker build --tag roundrobin .
-
-Como resultado se obtiene.
-
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/dockerLocal.PNG)
+```
+version: '2'
 
 
-### Creacion de Containers Local
+services:
+web:
+build:
+context: .
+dockerfile: Dockerfile
+container_name: web
+ports:
+- "8087:6000"
+db:
+image: mongo:3.6.1
+container_name: db
+volumes:
+- mongodb:/data/db
+- mongodb_config:/data/configdb
+ports:
+- 27017:27017
+command: mongod
 
-- El container de la base de datos se crea por defecto al mismo tiempo que se creo la imagen de esta. En el caso de los Containers de RoundRobin y LogServices se ejecutan los siguientes comandos(estos comando se tiene que ejecutar en la respectiva carpeta raiz de
-  cada proyecto).
+volumes:
+mongodb:
+mongodb_config:
+```
 
-        docker run -d -p 35001:6000 --name logservice1 logservices 
-        docker run -d -p 35002:6000 --name logservice2 logservices 
-        docker run -d -p 35003:6000 --name logservice3 logservices 
+Como se puede observar se agregó como servicio con el nombre db utilizando la imagen mongo:3.6.1
 
+### LogService
 
-        docker run -d -p 35004:6000 --name roundrobin1 roundrobin
+Servicio en el cual se podrán registrar en la base de datos descrita anteriormente diferentes mensajes puestos por el usuario.
 
-Como resultado se obtiene.
+El servicio de logs se realizo mediante el framework Spark en donde se añadieron dos endpoints, uno
+correspondiente al metodo POST para poder insertar los mensajes de manera correcta en la base de datos, y otro
+con el metodo GET para poder obtener los 10 ultimos logs.
 
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/dokcerLocal.PNG)
+![PostMessage](Images/PostMessageLocal.png)
 
-###  Añadir iamgenes en repositorio de DockerHub
+### Creación de contenedores 
 
-Para la añadir las imagenes en un repositorio de DockerHub, para ello se debe crear localmente una imagen con el nombre del repositorio a donde se va a subir y posteriormente realizar un push para empujar la imagen al repositorio(estos comando se tiene que ejecutar en la respectiva carpeta raiz de cada proyecto).
+Para que la imagen de docker pueda ejecutar la aplicación java se deberá crear el siguiente DockerFile:
 
-        docker tag roundrobin juanromero31/roundrobin
-        docker push juanromero31/roundrobin
+```
+FROM openjdk:8
 
-### containers en AWS
+WORKDIR /usrapp/bin
 
-Al tener configurados los grupos de seguridad lso puertos e instalado docker como dice en la guia se vuelven a ajecutar los comandos para crear los containers en la instancia.
+ENV PORT 6000
 
+COPY /target/classes /usrapp/bin/classes
+COPY /target/dependency /usrapp/bin/dependency
 
+CMD ["java","-cp","./classes:./dependency/*","edu.escuelaing.arep.SparkWebServer"]
+```
 
+El cual al ejecutarse ejecutara la instruccion para poder compilar el proyecto. A continuación se debera ejecutar los siguientes 
+comandos en el directorio raiz de nuestro proyecto para generar las dependencias y estas puedan ser añadidas a la imagen:
 
-Round Robin
-http://ec2-54-237-117-148.compute-1.amazonaws.com:35004/
+```
+mvn clean
+mvn install
+```
 
-![alt text](https://github.com/JuanRomero11/AREP-LAB5/blob/main/images/aws.png)
+Ahora se crearan dos contenedores docker, el primero conteniendo la base de datos como se pudo ver anteriormente,y el segundo para
+dockerizar la aplicacion java. Para crear los contenedores, en una terminal se deberá ejecutar el siguiente comando:
 
-LogServices
+```
+docker-compose up -d
+```
 
-http://ec2-54-237-117-148.compute-1.amazonaws.com:35001/
-http://ec2-54-237-117-148.compute-1.amazonaws.com:35002/
-http://ec2-54-237-117-148.compute-1.amazonaws.com:35003/
+Para ver que efectivamente los contenedores se hallan ejecutado y creado utilizaremos el comando:
 
-la maquina instancia no esta activa debido a las recomendaciones dadas por el profesor sobre los creditos.
+```
+docker images
+docker ps
+```
 
-## Integracion continua
+![Images](Images/dockerImages.png)
 
-[![CircleCI](https://circleci.com/gh/circleci/circleci-docs.svg?style=svg)]()
+![Containers](Images/dockerContainers.png)
 
-## Autor
-Juan Guillermo Romero
-## License
-Este codigo tiene una licencia Apache License 2.0 la cual se detalla en https://github.com/JuanRomero11/AREP-LAB5/blob/main/LICENSE
+### Subir imagenes a DockerHub
+
+Para subir una imagen a DockerHub se debera tener una cuenta creada en el mismo, y crear 2 repositorios,
+uno para la base de datos MongoDB y otro para la aplicación Java, posteriormente utilizaremos el siguiente comando
+para asociar cada una de las imágenes a un repositorio en DockerHub.
+
+![DockerHub](Images/DockerHub.png)
+
+Primero deberemos iniciar sesión en docker mediante el comando
+
+```
+docker login
+```
+
+Pondremos nuestras credenciales, y ahora asociaremos las imagenes a los repositorios creados mediante el comando:
+
+```
+docker tag mongo:3.6.1 desarik/sparkmongodb
+docker tag aupn-primer-docker-web desarik/spark
+```
+
+Y ahora subiremos las imagenes mediante el comando
+
+```
+docker push dnielben/sparkmongodb:latest
+docker push dnielben/spark:latest
+```
+
+### Descargar los contenedores en EC2
+
+Para descargar los contenedores y instalarlos en una maquina EC2, primero deberemos crear una instancia
+EC2, crear un certificado y iniciar sesion mediante el protocolo ssh en una terminal, si su sistema operativo
+es Windows se recomienda el uso de una terminal Linux descargada, para este caso se utilizara el mismo GitBash.
+
+![LoginEc2](Images/sshLoginEc2.png)
+
+Procederemos a actualizar el sistema mediante el comando
+
+```
+sudo yum update
+```
+
+Y a descargar docker en nuestra instancia de EC2 mediante el comando
+
+```
+sudo yum install docker
+```
+
+Le daremos permisos de ejecución en el sistema mediante el comando:
+
+```
+sudo service start docker
+```
+y cambiar los permisos de usuario del usuario user-ec2 con el siguiente comando:
+
+```
+sudo usermod -a -G docker ec2-user
+```
+
+Nos desconectaremos de la instancia de EC2 para que los cambios surtan efecto, y nos volveremos 
+a conectar para descargar las imágenes de DockerHub y ejecutarlas mediante el siguiente comando:
+
+Para la imagen que contiene el spark:
+
+```
+docker run -d -p 42000:6000 --name sparkaws desarik/spark
+```
+
+Para la imagen que contiene el MongoDB
+
+```
+docker run -d -p 42000:6000 --name sparkmongodb desarik/sparkmongodb
+```
+
+y mediante la direccion podremos acceder al servicio desplegado mediante la pagina
+web
+
+```
+http://ec2-54-166-156-34.compute-1.amazonaws.com:42000/logService
+```
+
+La maquina estara apagada por efectos de costos.
+
+### Autor
+- Daniel Alejandro Mejía Rojas - Fecha: 30/10/2021
+
+### Licencia
+This project is licensed under the MIT License - see the LICENSE.md file for details
